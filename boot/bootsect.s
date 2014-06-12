@@ -8,6 +8,7 @@
 SETUPLEN = 4 
 BOOTSEG = 0x07c0	! the address will be execute by BIOS when powered on
 INITSEG = 0x9000	! move code of BOOTSEG to here, real address 0x90000
+SYSSEG   = 0x1000           ! system loaded at 0x10000 (65536).
 
 start:
 	mov ax, #BOOTSEG
@@ -66,13 +67,16 @@ ok_load_setup:
 ! we have written the message, now
 ! load the system (at 0x10000)
 
+	mov ax, #SYSSEG
+	mov es, ax
+	call read_it
+	call kill_motor
 
+read_it:
+	mov ax, ax
 
-
-
-
-
-
+kill_motor:
+	mov ax, ax
 
 sectors:
 	.word 0

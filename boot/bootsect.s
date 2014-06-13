@@ -3,13 +3,31 @@
 ! so the real system size is 0x30000 bytes
 !
 
-!SYSSIZE = 0x3000
+SYSSIZE = 0x3000
+
+.globl begtext, begdata, begbss, endtext, enddata, endbss
+.text
+begtext:
+.data
+begdata:
+.bss
+begbss:
+.text
+
 
 SETUPLEN = 4 
 BOOTSEG = 0x07c0	! the address will be execute by BIOS when powered on
 INITSEG = 0x9000	! move code of BOOTSEG to here, real address 0x90000
 SYSSEG   = 0x1000           ! system loaded at 0x10000 (65536).
+SETUPSEG = 0x9020           ! setup starts here
+ENDSEG   = SYSSEG + SYSSIZE     ! where to stop loading
 
+
+! ROOT_DEV 0x000 - same type of floppy as boot
+! 0x301 - first partition on first drive etc
+ROOT_DEV = 0x306
+
+entry start
 start:
 	mov ax, #BOOTSEG
 	mov ds, ax	! move the BOOTSEG to ds(source position)
@@ -72,11 +90,129 @@ ok_load_setup:
 	call read_it
 	call kill_motor
 
+! After load the system, check the root-device to use. If the device is
+! defined(!=0), nothing is done and the given device is used.
+! Otherwise, either /dev/SP0(2.28) or /dev/at0(2.8) depending on the nr
+! of the sectors that BIOS reports currently.
+
+	seg cs
+	mov ax, root_dev
+	cmp ax, #0
+	jne root_defined
+	seg cs
+	mov bx, sectors
+	mov ax, #0x0208	! /dev/ps0 - 1.2Mb
+	cmp bx, #15
+	je root_defined
+	mov ax, #0x021c
+	cmp bx, #18
+	je root_defined
+undef_root:
+	jmp undef_root	! dead loop
+root_defined:
+	seg cs
+	mov root_dev, ax
+
+! after setup and system loaded, jump to setup-runtine
+	jmpi 0, SETUPSEG
+
+sread:  .word 1+SETUPLEN    ! sectors read of current track
+head:   .word 0         ! current head
+track:  .word 0         ! current track
+
+
 read_it:
-	mov ax, ax
+	mov ax, es
+	test ax, #0x0fff
+die:	jne die	! es must be at 64KB boundary
+	xor bx, bx
+rp_read:
+	mov ax, es
+	cmp ax, #ENDSEG
+	jb ok1_read
+	ret
+ok1_read:
+	seg cs
+	mov ax, sectors
+	sub ax, sread
+	mov cx, ax
+	shl cx, #9
+	add cx, bx
+	jnc ok2_read
+	je ok2_read
+	xor ax, ax
+	sub ax, bx
+	shr	ax, #9
+ok2_read:
+	call read_track
+	mov cx, ax
+	add ax, sread
+	seg cs
+	cmp ax, sectors
+	jne ok3_read
+	mov ax, #1
+	sub ax, head
+	jne ok4_read
+	jnc track
+ok4_read:
+	mov head, ax
+	xor ax, ax
+ok3_read:
+	mov sread, ax
+	shl cx, #9
+	add bx, cx
+	jnc rp_read
+	mov ax, es
+	add ax, #0x1000
+	mov es, ax
+	xor bx, bx
+	jmp rp_read
+
+read_track:
+    push ax
+    push bx
+    push cx
+    push dx
+    mov dx,track
+    mov cx,sread
+    inc cx
+    mov ch,dl
+    mov dx,head
+    mov dh,dl
+    mov dl,#0
+    and dx,#0x0100
+    mov ah,#2
+    int 0x13
+    jc bad_rt
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+bad_rt: mov ax,#0
+    mov dx,#0
+    int 0x13
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    jmp read_track
+
+!
+! This procedure turns off the floppy drive motor, so
+! that we enter the kernel in a known state, and
+! don't have to worry about it later.
 
 kill_motor:
-	mov ax, ax
+    push dx
+    mov dx,#0x3f2
+    mov al,#0
+    outb
+    pop dx
+    ret
+
+root_dev:
+	.word ROOT_DEV
 
 sectors:
 	.word 0

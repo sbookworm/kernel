@@ -116,12 +116,39 @@ end_move:
 	lidt idt_48
 	lgdt gdt_48
 
+! that was painless, now enable A20
+
+	call empty_8042
+	mov al, #0xD1 ! command write
+	out #0x64, al
+	call empty_8042
+	mov al, #0xDF
+	out #0x60, al
+	call empty_8042
+!!!! code here !!!!
+
+! This routine checks that the keyboard command queue is empty
+! No timeout is used - if this hangs there is something wrong
+! with the machine, and we probably could not proceed anyway
+empty_8042:
+	.word 0x00eb, 0x00eb
+	in al, #0x64 ! 8042 status port
+	test al, #2 ! is input buffer full?
+	jnz empty_8042
+	ret
+
 gdt:
     .word   0,0,0,0     ! dummy
 
+    .word   0x07FF      ! 8Mb - limit=2047 (2048*4096=8Mb)
+    .word   0x0000      ! base address=0
+    .word   0x9A00      ! code read/exec
+    .word   0x00C0      ! granularity=4096, 386
 
-!!!!!! code here !!!!!!!!!!!!
-
+    .word   0x07FF      ! 8Mb - limit=2047 (2048*4096=8Mb)
+    .word   0x0000      ! base address=0
+    .word   0x9200      ! data read/write
+    .word   0x00C0      ! granularity=4096, 386
 
 idt_48:
     .word   0           ! idt limit=0
@@ -130,4 +157,11 @@ idt_48:
 gdt_48:
     .word   0x800       ! gdt limit=2048, 256 GDT entries
     .word   512+gdt,0x9 ! gdt base = 0X9xxxx
+
+.text
+endtext:
+.data
+enddata:
+.bss
+ndbss:
 

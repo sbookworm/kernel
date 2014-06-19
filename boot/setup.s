@@ -125,6 +125,14 @@ end_move:
 	mov al, #0xDF
 	out #0x60, al
 	call empty_8042
+
+! well, that went ok, I hope. Now reprogram the interrupts :-(
+! put them right after the intel-reserved hardware interrupts, at
+! int 0x20-0x2F. There they won't mess up anything. Sadly IBM really
+! messed this up with the original PC, and they haven't been able to
+! rectify it afterwards. Thus the bios puts interrupts at 0x08-0x0f,
+!
+
 !!!! code here !!!!
 
 ! This routine checks that the keyboard command queue is empty

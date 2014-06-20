@@ -131,9 +131,39 @@ end_move:
 ! int 0x20-0x2F. There they won't mess up anything. Sadly IBM really
 ! messed this up with the original PC, and they haven't been able to
 ! rectify it afterwards. Thus the bios puts interrupts at 0x08-0x0f,
-!
+! which is used for the internal hardware interrupts as well. We just
+! have to reprogram the 8259
 
-!!!! code here !!!!
+	mov al, #0x11 ! initialization sequence
+	out #0x20, al ! send it to 8259A-1
+	.word 0x00eb, 0x00eb ! jmp $+2, jmp $+2
+	out #0xA0, al ! and to 8259A-2
+	.word 0x00eb, 0x00eb
+	mov al, #0x20 ! start of hardware int's(0x20)
+	out #0x21, al
+    .word   0x00eb,0x00eb
+    mov al,#0x04        ! 8259-1 is master
+    out #0x21,al
+    .word   0x00eb,0x00eb
+    mov al,#0x02        ! 8259-2 is slave
+    out #0xA1,al
+    .word   0x00eb,0x00eb
+    mov al,#0x01        ! 8086 mode for both
+    out #0x21,al
+    .word   0x00eb,0x00eb
+    out #0xA1,al
+    .word   0x00eb,0x00eb
+    mov al,#0xFF        ! mask off all interrupts for now
+    out #0x21,al
+    .word   0x00eb,0x00eb
+    out #0xA1,al
+
+! well, now's the time to actually move into protected mode
+
+	mov ax, #0x0001	! protected mode(PE) bit
+	lmsw ax
+	jmpi 0, 8 ! jmp offset 0 of the segment 8(cs)
+
 
 ! This routine checks that the keyboard command queue is empty
 ! No timeout is used - if this hangs there is something wrong
